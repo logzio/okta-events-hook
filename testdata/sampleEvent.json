@@ -1,0 +1,68 @@
+{
+  "eventType": "com.okta.event_hook",
+  "eventTypeVersion": "1.0",
+  "cloudEventsVersion": "0.1",
+  "source": "https://trial-1653213.okta.com/api/v1/eventHooks/who3bvy2yeMS7AL67697",
+  "eventId": "aad38794-8234-4c85-93e7-8092b2534131",
+  "data": {
+    "events": [
+      {
+        "uuid": "a7936860-dba3-4077-903e-0815b1e948ef",
+        "published": "2022-11-14T17:02:36.533Z",
+        "eventType": "user.lifecycle.delete.initiated",
+        "version": "0",
+        "displayMessage": "Delete Okta user initiated.",
+        "severity": "INFO",
+        "client": {
+          "userAgent": {
+            "rawUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+            "os": "Mac OS X",
+            "browser": "CHROME"
+          },
+          "zone": null,
+          "device": "Computer",
+          "id": null,
+          "ipAddress": "77.125.32.63",
+          "geographicalContext": {
+            "city": "Tel Aviv",
+            "state": "Tel Aviv",
+            "country": "Israel",
+            "postalCode": null,
+            "geolocation": {
+              "lat": 32.0803,
+              "lon": 34.7805
+            }
+          },
+          "ipChain": null
+        },
+        "device": null,
+        "actor": null,
+        "outcome": {
+          "result": "Success",
+          "reason": null
+        },
+        "target": null,
+        "transaction": {
+          "type": null,
+          "id": "Y3J0rF4pu300iCT3A9lccwAAAPU",
+          "detail": null
+        },
+        "debugContext": null,
+        "legacyEventType": "core.user.config.user_status.delete.initiated",
+        "authenticationContext": {
+          "authenticationProvider": null,
+          "credentialProvider": null,
+          "credentialType": null,
+          "issuer": null,
+          "authenticationStep": 0,
+          "externalSessionId": null,
+          "interface": null
+        },
+        "securityContext": null,
+        "insertionTimestamp": null
+      }
+    ]
+  },
+  "eventTime": "2022-11-14T17:02:36.691Z",
+  "contentType": "application/json"
+}
