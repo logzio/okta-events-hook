@@ -65,7 +65,7 @@ func CheckOktaNewEndpointValidation(request events.APIGatewayProxyRequest) event
 }
 
 func extractGlobalFields(body map[string]interface{}) map[string]interface{} {
-	globalFields := map[string]interface{}{"type": "okta-event"}
+	globalFields := map[string]interface{}{"type": "okta"}
 	for k, v := range body {
 		if k != "data" {
 			globalFields[k] = v
