@@ -245,7 +245,7 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	// get and validate logz.io credentials
 	logzioToken, logzioRegion, err := getCredentialsFromHeaders(request.Headers)
 	if err != nil {
-		return ApiGatewayResponse(400, err.Error()), err
+		return ApiGatewayResponse(400, err.Error()), nil
 	}
 	// in case server side is sleeping - wait 10s instead of waiting for him to wake up
 	client := &http.Client{
@@ -264,7 +264,7 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	marshalErr := json.Unmarshal([]byte(request.Body), &body)
 	if marshalErr != nil {
 		log.Printf("Error while unmarshalling request body: %s", marshalErr)
-		return ApiGatewayResponse(500, "Error while unmarshalling request body:"), err
+		return ApiGatewayResponse(500, "Error while unmarshalling request body:"), nil
 	}
 	// get global fields from the request
 	globalFields := extractGlobalFields(body)
@@ -286,7 +286,7 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	}
 	statusCode := logzioClient.export()
 	if statusCode != 200 {
-		return ApiGatewayResponse(statusCode, "Error while exporting logs to logz.io"), err
+		return ApiGatewayResponse(statusCode, "Error while exporting logs to logz.io"), nil
 	} else {
 		return ApiGatewayResponse(200, "Execution finished successfully, check your logz.io account to see the data"), nil
 
