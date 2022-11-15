@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aws/aws-lambda-go/events"
-	"io/ioutil"
+	"golang.org/x/exp/slices"
+	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -72,6 +74,28 @@ func extractGlobalFields(body map[string]interface{}) map[string]interface{} {
 	return globalFields
 }
 
+func getCredentialsFromHeaders(headers map[string]string) (string, string, error) {
+	logzioToken := headers["logzio_token"]
+	if logzioToken == "" {
+		return "", "", errors.New("logzio_token header not found")
+	} else {
+		match, _ := regexp.MatchString("[a-zA-Z]{32}", logzioToken)
+		if !match {
+			return "", "", errors.New("logzio token is not valid")
+		}
+	}
+	logzioRegion := headers["logzio_region"]
+	if logzioRegion == "" {
+		return "", "", errors.New("logzio_region header not found")
+	} else {
+		validRegions := []string{"us", "au", "wa", "nl", "ca", "eu", "uk"}
+		if !slices.Contains(validRegions, logzioRegion) {
+			return "", "", errors.New("logzio_region header value is not valid")
+		}
+	}
+	return logzioToken, logzioRegion, nil
+}
+
 type logzioClient struct {
 	token      string
 	url        string
@@ -93,7 +117,7 @@ func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
 	}
 	defer resp.Body.Close()
 	statusCode := resp.StatusCode
-	_, err = ioutil.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Error reading response body: %v", err)
 	}
@@ -218,9 +242,11 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	if response.Body != "" {
 		return response, nil
 	}
-	// get requestId to match firehose response requirements
-	logzioToken := request.Headers["logzio_token"]
-	logzioRegion := request.Headers["logzio_region"]
+	// get and validate logz.io credentials
+	logzioToken, logzioRegion, err := getCredentialsFromHeaders(request.Headers)
+	if err != nil {
+		return ApiGatewayResponse(400, err.Error()), err
+	}
 	// in case server side is sleeping - wait 10s instead of waiting for him to wake up
 	client := &http.Client{
 		Timeout: time.Second * 10,
@@ -235,10 +261,10 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	// handling request body
 	log.Println("Starting to parse request body")
 	var body map[string]interface{}
-	err := json.Unmarshal([]byte(request.Body), &body)
-	if err != nil {
-		log.Printf("Error while unmarshalling request body: %s", err)
-		return ApiGatewayResponse(500, "Error while unmarshalling request body:"), nil
+	marshalErr := json.Unmarshal([]byte(request.Body), &body)
+	if marshalErr != nil {
+		log.Printf("Error while unmarshalling request body: %s", marshalErr)
+		return ApiGatewayResponse(500, "Error while unmarshalling request body:"), err
 	}
 	// get global fields from the request
 	globalFields := extractGlobalFields(body)
@@ -260,7 +286,7 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	}
 	statusCode := logzioClient.export()
 	if statusCode != 200 {
-		return ApiGatewayResponse(statusCode, "Error while exporting logs to logz.io"), nil
+		return ApiGatewayResponse(statusCode, "Error while exporting logs to logz.io"), err
 	} else {
 		return ApiGatewayResponse(200, "Execution finished successfully, check your logz.io account to see the data"), nil
 
