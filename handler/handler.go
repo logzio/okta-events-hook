@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/aws/aws-lambda-go/events"
 	"io/ioutil"
@@ -56,8 +57,19 @@ func CheckOktaNewEndpointValidation(request events.APIGatewayProxyRequest) event
 			},
 			IsBase64Encoded: false,
 		}
+	} else {
+		return events.APIGatewayProxyResponse{}
 	}
-	return events.APIGatewayProxyResponse{}
+}
+
+func extractGlobalFields(body map[string]interface{}) map[string]interface{} {
+	globalFields := map[string]interface{}{"type": "okta-event"}
+	for k, v := range body {
+		if k != "data" {
+			globalFields[k] = v
+		}
+	}
+	return globalFields
 }
 
 type logzioClient struct {
@@ -70,7 +82,7 @@ type logzioClient struct {
 const maxBulkSize = 10000000
 
 func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
-	url := fmt.Sprintf("%s/?token=%s&type=okta-events", l.url, l.token)
+	url := fmt.Sprintf("%s/?token=%s", l.url, l.token)
 	req, err := http.NewRequest("POST", url, &data)
 	req.Header.Add("Content-Encoding", "gzip")
 	log.Printf("Sending bulk of %v bytes\n", l.logsBuffer.Len())
@@ -163,6 +175,19 @@ func (l *logzioClient) export() int {
 	return statusCode
 }
 
+// writeRecordToBuffer Takes a log record compression the data and writes it to the data buffer
+func (l *logzioClient) writeLog(record interface{}) error {
+	recordBytes, marshalErr := json.Marshal(record)
+	if marshalErr != nil {
+		return errors.New(fmt.Sprintf("Error getting log bytes: %s", marshalErr.Error()))
+	}
+	_, bufferErr := l.logsBuffer.Write(append(recordBytes, '\n'))
+	if bufferErr != nil {
+		return errors.New(fmt.Sprintf("Error writing log bytes to buffer: %s", bufferErr.Error()))
+	}
+	return nil
+}
+
 func (l *logzioClient) setListenerURL(region string) {
 	var url string
 	lowerCaseRegion := strings.ToLower(region)
@@ -196,14 +221,6 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	// get requestId to match firehose response requirements
 	logzioToken := request.Headers["logzio_token"]
 	logzioRegion := request.Headers["logzio_region"]
-	log.Println("Starting to parse request body")
-	var body map[string]interface{}
-	err := json.Unmarshal([]byte(request.Body), &body)
-	if err != nil {
-		log.Printf("Error while unmarshalling request body: %s", err)
-		return ApiGatewayResponse(500, "Error while unmarshalling request body:"), nil
-	}
-
 	// in case server side is sleeping - wait 10s instead of waiting for him to wake up
 	client := &http.Client{
 		Timeout: time.Second * 10,
@@ -215,6 +232,37 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		logsBuffer: bytes.Buffer{},
 	}
 	logzioClient.setListenerURL(logzioRegion)
+	// handling request body
+	log.Println("Starting to parse request body")
+	var body map[string]interface{}
+	err := json.Unmarshal([]byte(request.Body), &body)
+	if err != nil {
+		log.Printf("Error while unmarshalling request body: %s", err)
+		return ApiGatewayResponse(500, "Error while unmarshalling request body:"), nil
+	}
+	// get global fields from the request
+	globalFields := extractGlobalFields(body)
+	// Iterate over all events and write to logs buffer
+	for _, e := range body["data"].(map[string]interface{})["events"].([]interface{}) {
+		// convert event to map
+		event := e.(map[string]interface{})
+		// add logzio timestamp
+		event["@timestamp"] = event["published"]
+		delete(event, "published")
+		// attach global filed to event
+		for k, v := range globalFields {
+			event[k] = v
+		}
+		writeError := logzioClient.writeLog(event)
+		if writeError != nil {
+			log.Printf("Error while writing log to the buffer: %s", writeError.Error())
+		}
+	}
+	statusCode := logzioClient.export()
+	if statusCode != 200 {
+		return ApiGatewayResponse(statusCode, "Error while exporting logs to logz.io"), nil
+	} else {
+		return ApiGatewayResponse(200, "Execution finished successfully, check your logz.io account to see the data"), nil
 
-	return ApiGatewayResponse(200, "Execution finished successfully"), nil
+	}
 }

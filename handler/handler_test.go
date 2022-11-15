@@ -21,6 +21,7 @@ func TestHandleRequest(t *testing.T) {
 	ctx := context.Background()
 	headers := make(map[string]string)
 	headers["logzio_token"] = "token"
+	headers["logzio_region"] = "us"
 	headers["x-okta-request-id"] = "Y3J0sjoXfBZ536qdqnkabwAAA58"
 	request := events.APIGatewayProxyRequest{
 		HTTPMethod:      "POST",
