@@ -22,9 +22,6 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
-      - name: Build project
-        run: make build
-
       - name: Create zip package
         run: make function
 
