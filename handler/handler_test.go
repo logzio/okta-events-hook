@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,7 +19,7 @@ func TestHandleRequest(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	byteValue, _ := ioutil.ReadAll(jsonFile)
+	byteValue, _ := io.ReadAll(jsonFile)
 	if err != nil {
 		t.Error(err)
 	}
