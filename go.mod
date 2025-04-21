@@ -1,11 +1,13 @@
 module github.com/logzio/okta-events-hook
 
-go 1.19
+go 1.23.0
+
+toolchain go1.23.4
 
 require (
-	github.com/aws/aws-lambda-go v1.34.1
-	github.com/stretchr/testify v1.7.2
-	golang.org/x/exp v0.0.0-20221114191408-850992195362
+	github.com/aws/aws-lambda-go v1.48.0
+	github.com/stretchr/testify v1.10.0
+	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
 )
 
 require (
