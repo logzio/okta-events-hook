@@ -124,7 +124,7 @@ func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
 	return statusCode
 }
 
-// shouldRetry is responsible to decide weather to retry a http request based on the response status coed
+// shouldRetry is responsible to decide whether to retry a http request based on the response status code
 func (l *logzioClient) shouldRetry(statusCode int) bool {
 	retry := true
 	switch statusCode {
