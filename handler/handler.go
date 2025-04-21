@@ -44,7 +44,6 @@ func ApiGatewayResponse(statusCode int, message string) events.APIGatewayProxyRe
 	}
 }
 func CheckOktaNewEndpointValidation(request events.APIGatewayProxyRequest) events.APIGatewayProxyResponse {
-	// okta endpoint verification
 	oktaVerification := request.Headers["x-okta-verification-challenge"]
 	if oktaVerification != "" {
 		data := oktaVerificationResponse{
@@ -150,7 +149,6 @@ func (l *logzioClient) shouldRetry(statusCode int) bool {
 // export sends the data buffer bytes to logz.io
 func (l *logzioClient) export() int {
 	var statusCode int
-	// gzip compress data before shipping
 	var compressedBuf bytes.Buffer
 	gzipWriter := gzip.NewWriter(&compressedBuf)
 	_, err := gzipWriter.Write(l.logsBuffer.Bytes())
@@ -172,7 +170,6 @@ func (l *logzioClient) export() int {
 		compressedBuf.Reset()
 		return http.StatusInternalServerError
 	}
-	// retry logic
 	backOff := time.Second * 2
 	sendRetries := 4
 	toBackOff := false
@@ -189,17 +186,15 @@ func (l *logzioClient) export() int {
 			break
 		}
 	}
-	// Send data to back up storage in case of shipping error that cannot be resolved
 	if statusCode != 200 {
 		log.Printf("Error sending logs, status code is: %d", statusCode)
 	}
-	// reset data buffers
 	l.logsBuffer.Reset()
 	compressedBuf.Reset()
 	return statusCode
 }
 
-// writeRecordToBuffer Takes a log record compression the data and writes it to the data buffer
+// writeLog Takes a log record compression the data and writes it to the data buffer
 func (l *logzioClient) writeLog(record interface{}) error {
 	recordBytes, marshalErr := json.Marshal(record)
 	if marshalErr != nil {
@@ -242,23 +237,19 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	if response.Body != "" {
 		return response, nil
 	}
-	// get and validate logz.io credentials
 	logzioToken, logzioRegion, err := getCredentialsFromHeaders(request.Headers)
 	if err != nil {
 		return ApiGatewayResponse(400, err.Error()), nil
 	}
-	// in case server side is sleeping - wait 10s instead of waiting for him to wake up
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
-	// Initialize logzioClient
 	logzioClient := logzioClient{
 		token:      logzioToken,
 		httpClient: client,
 		logsBuffer: bytes.Buffer{},
 	}
 	logzioClient.setListenerURL(logzioRegion)
-	// handling request body
 	log.Println("Starting to parse request body")
 	var body map[string]interface{}
 	marshalErr := json.Unmarshal([]byte(request.Body), &body)
@@ -268,14 +259,10 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	}
 	// get global fields from the request
 	globalFields := extractGlobalFields(body)
-	// Iterate over all events and write to logs buffer
 	for _, e := range body["data"].(map[string]interface{})["events"].([]interface{}) {
-		// convert event to map
 		event := e.(map[string]interface{})
-		// add logzio timestamp
 		event["@timestamp"] = event["published"]
 		delete(event, "published")
-		// attach global filed to event
 		for k, v := range globalFields {
 			event[k] = v
 		}
