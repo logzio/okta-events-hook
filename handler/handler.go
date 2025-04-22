@@ -87,7 +87,7 @@ func getCredentialsFromHeaders(headers map[string]string) (string, string, error
 	if logzioRegion == "" {
 		return "", "", errors.New("logzio_region header not found")
 	} else {
-		validRegions := []string{"us", "au", "wa", "nl", "ca", "eu", "uk"}
+		validRegions := []string{"us", "au", "ca", "eu", "uk"}
 		if !slices.Contains(validRegions, logzioRegion) {
 			return "", "", errors.New("logzio_region header value is not valid")
 		}
@@ -221,10 +221,6 @@ func (l *logzioClient) setListenerURL(region string) {
 		url = "https://listener-uk.logz.io:8071"
 	case "au":
 		url = "https://listener-au.logz.io:8071"
-	case "nl":
-		url = "https://listener-nl.logz.io:8071"
-	case "wa":
-		url = "https://listener-wa.logz.io:8071"
 	default:
 		url = "https://listener.logz.io:8071"
 	}
