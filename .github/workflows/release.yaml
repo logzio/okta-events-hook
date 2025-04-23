@@ -32,5 +32,5 @@ jobs:
           AWS_REGION: us-east-1
         run: |
           aws lambda update-function-code \
-            --function-name okta-events-hook-dev \
+            --function-name okta-event-hook-dev \
             --zip-file fileb://function.zip
