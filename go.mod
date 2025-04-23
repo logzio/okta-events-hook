@@ -6,6 +6,7 @@ toolchain go1.23.4
 
 require (
 	github.com/aws/aws-lambda-go v1.48.0
+	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
 )
