@@ -12,7 +12,7 @@ This guide explains how to configure an Okta Event Hook that sends selected Syst
 
 - **Okta Admin Access** – To configure event hooks.
 - **Logz.io shipping token** (32-character) 
-- **Logz.io region** – e.g., `us`, `au`, `eu`, `uk`, `ca`, `wa`
+- **Logz.io region** – e.g., `us`, `au`, `eu`, `uk`, `ca`
 ---
 
 ### 1. Create the Event Hook in Okta
@@ -28,14 +28,14 @@ This guide explains how to configure an Okta Event Hook that sends selected Syst
 2. **Name**: e.g., `LogzIoEventHook`
 3. **Endpoint URL**: Logz.io Lambda URL:
    ```
-   https://<api-id>.execute-api.<region>.amazonaws.com/prod/hooks
+   https://okta.listener-logz.io
    ```
 
 #### 1.3 Configure Authentication & Headers
 
 2. **Headers**:
     - `logzio_token`: your Logz.io shipping token
-    - `logzio_region`: your Logz.io region (e.g., `us`, `au`, `nl`, `eu`, etc.)
+    - `logzio_region`: your Logz.io region (`us`, `au`, `eu`, `ca`, `uk`)
 
 #### 1.4 Select Events
 
@@ -45,11 +45,6 @@ This guide explains how to configure an Okta Event Hook that sends selected Syst
 
 1. Save the hook.
 2. Okta will send a one-time **GET** request with the `x-okta-verification-challenge` header.
-3. Your Lambda must respond with:
-   ```json
-   { "verification": "<value_from_header>" }
-   ```
-
 ---
 
 ### 2. Preview & Test the Hook
@@ -60,7 +55,7 @@ This guide explains how to configure an Okta Event Hook that sends selected Syst
 
 #### 2.2 Live Testing
 
-- Trigger an actual Okta event and confirm it appears in your Lambda logs and Logz.io dashboard.
+- Trigger an actual Okta event and confirm it appears in your logs and Logz.io dashboard.
 
 ---
 ## Development
