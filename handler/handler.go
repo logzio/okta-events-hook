@@ -258,6 +258,8 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 	for _, e := range body["data"].(map[string]interface{})["events"].([]interface{}) {
 		event := e.(map[string]interface{})
 		event["@timestamp"] = event["published"]
+		message := event["displayMessage"]
+		event["message"] = message
 		delete(event, "published")
 		for k, v := range globalFields {
 			event[k] = v
