@@ -144,7 +144,7 @@ func TestE2EHandleRequest(t *testing.T) {
 	require.Equal(t, 200, resp.StatusCode)
 
 	t.Log("waiting for logs to be indexed...")
-	time.Sleep(15 * time.Second)
+	time.Sleep(120 * time.Second)
 
 	eType, _ := evt["eventType"].(string)
 	query := fmt.Sprintf("type:okta AND eventType:%s AND eventId:%s", eType, uniqueId)
