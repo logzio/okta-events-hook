@@ -1,0 +1,29 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.23
+
+      - name: Install dependencies
+        run: go mod tidy
+
+      - name: Run tests
+        env:
+          LOGZIO_API_TOKEN: ${{ secrets.LOGZIO_API_TOKEN }}
+          LOGZIO_LOGS_TOKEN: ${{ secrets.LOGZIO_LOGS_TOKEN }}
+        run: go test ./... -v

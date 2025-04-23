@@ -1,0 +1,70 @@
+{
+  "eventType": "com.okta.event_hook",
+  "eventTypeVersion": "1.0",
+  "cloudEventsVersion": "0.1",
+  "source": "https://trial-8778577.okta.com/api/v1/eventHooks/whoqrsoellhf6mTcl697",
+  "eventId": "6e0e111c-fced-493b-82e3-4fa3c0f7fd59",
+  "data": {
+    "events": [
+      {
+        "uuid": "33e9dcbc-3ed3-423b-acdf-7e44ab17ebdb",
+        "published": "2025-04-21T06:19:19.251976Z",
+        "eventType": "user.behavior.profile.reset",
+        "version": "0",
+        "displayMessage": "User behavior profile reset.",
+        "severity": "INFO",
+        "client": {
+          "userAgent": {
+            "rawUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+            "os": "Mac OS 14.5.0 (Sonoma)",
+            "browser": "CHROME"
+          },
+          "zone": null,
+          "device": "Computer",
+          "id": null,
+          "ipAddress": "223.205.201.80",
+          "geographicalContext": {
+            "city": "Ko Samui",
+            "state": "Surat Thani",
+            "country": "Thailand",
+            "postalCode": "84310",
+            "geolocation": {
+              "lat": 9.4639,
+              "lon": 100.0484
+            }
+          },
+          "ipChain": null
+        },
+        "device": null,
+        "actor": null,
+        "outcome": {
+          "result": "Success",
+          "reason": null
+        },
+        "target": null,
+        "transaction": {
+          "type": null,
+          "id": "66546e59bafc6fc5e589aabee591cf96",
+          "detail": null
+        },
+        "debugContext": null,
+        "legacyEventType": null,
+        "authenticationContext": {
+          "authenticationProvider": null,
+          "credentialProvider": null,
+          "credentialType": null,
+          "issuer": null,
+          "authenticationStep": 0,
+          "rootSessionId": null,
+          "externalSessionId": null,
+          "authenticatorContext": null,
+          "interface": null
+        },
+        "securityContext": null,
+        "insertionTimestamp": null
+      }
+    ]
+  },
+  "eventTime": "2025-04-21T06:19:19.305084Z",
+  "contentType": "application/json"
+}

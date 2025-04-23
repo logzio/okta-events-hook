@@ -1,0 +1,68 @@
+{
+  "eventType": "com.okta.event_hook",
+  "eventTypeVersion": "1.0",
+  "cloudEventsVersion": "0.1",
+  "source": "https://trial-1653213.okta.com/api/v1/eventHooks/who3bvy2yeMS7AL67697",
+  "eventId": "f7cf6af4-bd2e-4e98-8c89-f73a1a8cbf65",
+  "data": {
+    "events": [
+      {
+        "uuid": "ea7ba181-320a-4004-b962-c170ae2b559f",
+        "published": "2022-11-15T10:44:57.563Z",
+        "eventType": "system.log_stream.lifecycle.delete",
+        "version": "0",
+        "displayMessage": "Log stream deleted",
+        "severity": "INFO",
+        "client": {
+          "userAgent": {
+            "rawUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+            "os": "Mac OS X",
+            "browser": "CHROME"
+          },
+          "zone": null,
+          "device": "Computer",
+          "id": null,
+          "ipAddress": "62.56.224.26",
+          "geographicalContext": {
+            "city": "HatsorHaGelilit",
+            "state": "Northern District",
+            "country": "Israel",
+            "postalCode": null,
+            "geolocation": {
+              "lat": 32.9833,
+              "lon": 35.5391
+            }
+          },
+          "ipChain": null
+        },
+        "device": null,
+        "actor": null,
+        "outcome": {
+          "result": "Success",
+          "reason": null
+        },
+        "target": null,
+        "transaction": {
+          "type": null,
+          "id": "Y3NtqVX_DJLb8CdxwPo_yQAAB-Q",
+          "detail": null
+        },
+        "debugContext": null,
+        "legacyEventType": null,
+        "authenticationContext": {
+          "authenticationProvider": null,
+          "credentialProvider": null,
+          "credentialType": null,
+          "issuer": null,
+          "authenticationStep": 0,
+          "externalSessionId": null,
+          "interface": null
+        },
+        "securityContext": null,
+        "insertionTimestamp": null
+      }
+    ]
+  },
+  "eventTime": "2022-11-15T10:44:57.635Z",
+  "contentType": "application/json"
+}
