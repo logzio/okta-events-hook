@@ -110,13 +110,19 @@ func (l *logzioClient) getFullURL() string {
 }
 
 func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
-	url := l.getFullURL()
-	req, err := http.NewRequest("POST", url, &data)
+	fullURL := l.getFullURL()
+	req, err := http.NewRequest("POST", fullURL, &data)
+	if err != nil {
+		log.Printf("Error creating request to %s %s\n", fullURL, err)
+		return http.StatusInternalServerError
+	}
+
 	req.Header.Add("Content-Encoding", "gzip")
-	log.Printf("Sending bulk of %v bytes to %s\n", l.logsBuffer.Len(), url)
+	
+	log.Printf("Sending bulk of %v bytes to %s\n", l.logsBuffer.Len(), fullURL)
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
-		log.Printf("Error sending logs to %s %s\n", url, err)
+		log.Printf("Error sending logs to %s %s\n", fullURL, err)
 		return resp.StatusCode
 	}
 	defer resp.Body.Close()
@@ -125,7 +131,7 @@ func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
 	if err != nil {
 		log.Printf("Error reading response body: %v", err)
 	}
-	log.Printf("Request to %s returned response status code: %v \n", url, statusCode)
+	log.Printf("Request to %s returned response status code: %v \n", fullURL, statusCode)
 	return statusCode
 }
 
