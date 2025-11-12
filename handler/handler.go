@@ -7,14 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-lambda-go/events"
-	"golang.org/x/exp/slices"
 	"io"
 	"log"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/aws/aws-lambda-go/events"
+	"golang.org/x/exp/slices"
 )
 
 type apiGatewayResponse struct {
@@ -104,11 +105,15 @@ type logzioClient struct {
 
 const maxBulkSize = 10000000
 
+func (l *logzioClient) getFullURL() string {
+	return fmt.Sprintf("%s/?token=%s", l.url, l.token)
+}
+
 func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
-	url := fmt.Sprintf("%s/?token=%s", l.url, l.token)
+	url := l.getFullURL()
 	req, err := http.NewRequest("POST", url, &data)
 	req.Header.Add("Content-Encoding", "gzip")
-	log.Printf("Sending bulk of %v bytes\n", l.logsBuffer.Len())
+	log.Printf("Sending bulk of %v bytes to %s\n", l.logsBuffer.Len(), url)
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
 		log.Printf("Error sending logs to %s %s\n", url, err)
@@ -120,7 +125,7 @@ func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
 	if err != nil {
 		log.Printf("Error reading response body: %v", err)
 	}
-	log.Printf("Response status code: %v \n", statusCode)
+	log.Printf("Request to %s returned response status code: %v \n", url, statusCode)
 	return statusCode
 }
 
@@ -173,9 +178,10 @@ func (l *logzioClient) export() int {
 	backOff := time.Second * 2
 	sendRetries := 4
 	toBackOff := false
+	fullURL := l.getFullURL()
 	for attempt := 0; attempt < sendRetries; attempt++ {
 		if toBackOff {
-			log.Printf("Failed to send logs, trying again in %v\n", backOff)
+			log.Printf("Failed to send logs to %s, trying again in %v\n", fullURL, backOff)
 			time.Sleep(backOff)
 			backOff *= 2
 		}
@@ -187,7 +193,7 @@ func (l *logzioClient) export() int {
 		}
 	}
 	if statusCode != 200 {
-		log.Printf("Error sending logs, status code is: %d", statusCode)
+		log.Printf("Error sending logs to %s, status code is: %d", fullURL, statusCode)
 	}
 	l.logsBuffer.Reset()
 	compressedBuf.Reset()
