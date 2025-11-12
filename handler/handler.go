@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -105,12 +106,54 @@ type logzioClient struct {
 
 const maxBulkSize = 10000000
 
-func (l *logzioClient) getFullURL() string {
-	return fmt.Sprintf("%s/?token=%s", l.url, l.token)
+var allowedHosts = []string{
+	"listener.logz.io:8071",
+	"listener-ca.logz.io:8071",
+	"listener-eu.logz.io:8071",
+	"listener-uk.logz.io:8071",
+	"listener-au.logz.io:8071",
+}
+
+func (l *logzioClient) isHostAllowed(host string) bool {
+	// Check against allowed production hosts
+	if slices.Contains(allowedHosts, host) {
+		return true
+	}
+	// Allow localhost for testing purposes only
+	// In production, setListenerURL always sets a logz.io URL, so localhost
+	// will only appear in test scenarios
+	if strings.HasPrefix(host, "127.0.0.1:") || strings.HasPrefix(host, "localhost:") {
+		return true
+	}
+	return false
+}
+
+func (l *logzioClient) getFullURL() (string, error) {
+	baseURL, err := url.Parse(l.url)
+	if err != nil {
+		return "", fmt.Errorf("invalid base URL: %w", err)
+	}
+
+	// Validate host is in allowed list
+	if !l.isHostAllowed(baseURL.Host) {
+		return "", fmt.Errorf("host %s is not in allowed list", baseURL.Host)
+	}
+
+	// Properly encode the token parameter
+	params := url.Values{}
+	params.Set("token", l.token)
+	baseURL.RawQuery = params.Encode()
+
+	return baseURL.String(), nil
 }
 
 func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
-	fullURL := l.getFullURL()
+	fullURL, err := l.getFullURL()
+	if err != nil {
+		log.Printf("Error constructing URL: %s\n", err)
+		return http.StatusInternalServerError
+	}
+
 	req, err := http.NewRequest("POST", fullURL, &data)
 	if err != nil {
 		log.Printf("Error creating request to %s %s\n", fullURL, err)
@@ -118,12 +161,15 @@ func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
 	}
 
 	req.Header.Add("Content-Encoding", "gzip")
-	
+
 	log.Printf("Sending bulk of %v bytes to %s\n", l.logsBuffer.Len(), fullURL)
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
 		log.Printf("Error sending logs to %s %s\n", fullURL, err)
-		return resp.StatusCode
+		if resp != nil {
+			return resp.StatusCode
+		}
+		return http.StatusInternalServerError
 	}
 	defer resp.Body.Close()
 	statusCode := resp.StatusCode
@@ -184,7 +230,11 @@ func (l *logzioClient) export() int {
 	backOff := time.Second * 2
 	sendRetries := 4
 	toBackOff := false
-	fullURL := l.getFullURL()
+	fullURL, err := l.getFullURL()
+	if err != nil {
+		log.Printf("Error constructing URL: %s\n", err)
+		return http.StatusInternalServerError
+	}
 	for attempt := 0; attempt < sendRetries; attempt++ {
 		if toBackOff {
 			log.Printf("Failed to send logs to %s, trying again in %v\n", fullURL, backOff)
