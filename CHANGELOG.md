@@ -1,5 +1,8 @@
 # Changes by Version
 
+## 1.0.1
+- Add full URL to Lambda function logs for troubleshooting.
+
 ## 1.0.0
 - Initial release of the project.
 - Includes:
