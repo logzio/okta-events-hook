@@ -7,14 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-lambda-go/events"
-	"golang.org/x/exp/slices"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/aws/aws-lambda-go/events"
+	"golang.org/x/exp/slices"
 )
 
 type apiGatewayResponse struct {
@@ -97,22 +99,103 @@ func getCredentialsFromHeaders(headers map[string]string) (string, string, error
 
 type logzioClient struct {
 	token      string
-	url        string
+	region     string
 	httpClient *http.Client
 	logsBuffer bytes.Buffer
+	testURL    string
 }
 
 const maxBulkSize = 10000000
 
+var logzioListenerURLs = map[string]string{
+	"us": "https://listener.logz.io:8071",
+	"ca": "https://listener-ca.logz.io:8071",
+	"eu": "https://listener-eu.logz.io:8071",
+	"uk": "https://listener-uk.logz.io:8071",
+	"au": "https://listener-au.logz.io:8071",
+}
+
+func (l *logzioClient) getFullURL() (string, error) {
+	var baseURL string
+	var ok bool
+
+	if l.testURL != "" {
+		baseURL = l.testURL
+	} else {
+		baseURL, ok = logzioListenerURLs[l.region]
+		if !ok {
+			return "", fmt.Errorf("region %s is not in logzioListenerURLs", l.region)
+		}
+	}
+
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL: %w", err)
+	}
+
+	if parsedURL.Scheme != "https" && l.testURL == "" {
+		return "", fmt.Errorf("invalid scheme %s, only https is allowed", parsedURL.Scheme)
+	}
+
+	params := url.Values{}
+	params.Set("token", l.token)
+	parsedURL.RawQuery = params.Encode()
+
+	return parsedURL.String(), nil
+}
+
 func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
-	url := fmt.Sprintf("%s/?token=%s", l.url, l.token)
-	req, err := http.NewRequest("POST", url, &data)
+	var baseURL string
+	if l.testURL != "" {
+		baseURL = l.testURL
+	} else {
+		var ok bool
+		baseURL, ok = logzioListenerURLs[l.region]
+		if !ok {
+			log.Printf("region %s is not in logzioListenerURLs\n", l.region)
+			return http.StatusInternalServerError
+		}
+	}
+
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		log.Printf("Error parsing URL: %s\n", err)
+		return http.StatusInternalServerError
+	}
+
+	if parsedURL.Scheme != "https" && l.testURL == "" {
+		log.Printf("invalid scheme %s\n", parsedURL.Scheme)
+		return http.StatusInternalServerError
+	}
+
+	params := url.Values{}
+	params.Set("token", l.token)
+	parsedURL.RawQuery = params.Encode()
+	fullURL := parsedURL.String()
+
+	if l.testURL == "" {
+		if _, ok := logzioListenerURLs[l.region]; !ok {
+			log.Printf("region %s is not in logzioListenerURLs\n", l.region)
+			return http.StatusInternalServerError
+		}
+	}
+
+	req, err := http.NewRequest("POST", fullURL, &data)
+	if err != nil {
+		log.Printf("Error creating request to %s %s\n", fullURL, err)
+		return http.StatusInternalServerError
+	}
+
 	req.Header.Add("Content-Encoding", "gzip")
-	log.Printf("Sending bulk of %v bytes\n", l.logsBuffer.Len())
+
+	log.Printf("Sending bulk of %v bytes to %s\n", l.logsBuffer.Len(), fullURL)
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
-		log.Printf("Error sending logs to %s %s\n", url, err)
-		return resp.StatusCode
+		log.Printf("Error sending logs to %s %s\n", fullURL, err)
+		if resp != nil {
+			return resp.StatusCode
+		}
+		return http.StatusInternalServerError
 	}
 	defer resp.Body.Close()
 	statusCode := resp.StatusCode
@@ -120,7 +203,7 @@ func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
 	if err != nil {
 		log.Printf("Error reading response body: %v", err)
 	}
-	log.Printf("Response status code: %v \n", statusCode)
+	log.Printf("Request to %s returned response status code: %v \n", fullURL, statusCode)
 	return statusCode
 }
 
@@ -173,9 +256,14 @@ func (l *logzioClient) export() int {
 	backOff := time.Second * 2
 	sendRetries := 4
 	toBackOff := false
+	fullURL, err := l.getFullURL()
+	if err != nil {
+		log.Printf("Error constructing URL: %s\n", err)
+		return http.StatusInternalServerError
+	}
 	for attempt := 0; attempt < sendRetries; attempt++ {
 		if toBackOff {
-			log.Printf("Failed to send logs, trying again in %v\n", backOff)
+			log.Printf("Failed to send logs to %s, trying again in %v\n", fullURL, backOff)
 			time.Sleep(backOff)
 			backOff *= 2
 		}
@@ -187,7 +275,7 @@ func (l *logzioClient) export() int {
 		}
 	}
 	if statusCode != 200 {
-		log.Printf("Error sending logs, status code is: %d", statusCode)
+		log.Printf("Error sending logs to %s, status code is: %d", fullURL, statusCode)
 	}
 	l.logsBuffer.Reset()
 	compressedBuf.Reset()
@@ -198,33 +286,23 @@ func (l *logzioClient) export() int {
 func (l *logzioClient) writeLog(record interface{}) error {
 	recordBytes, marshalErr := json.Marshal(record)
 	if marshalErr != nil {
-		return errors.New(fmt.Sprintf("Error getting log bytes: %s", marshalErr.Error()))
+		return fmt.Errorf("error getting log bytes: %w", marshalErr)
 	}
 	_, bufferErr := l.logsBuffer.Write(append(recordBytes, '\n'))
 	if bufferErr != nil {
-		return errors.New(fmt.Sprintf("Error writing log bytes to buffer: %s", bufferErr.Error()))
+		return fmt.Errorf("error writing log bytes to buffer: %w", bufferErr)
 	}
 	return nil
 }
 
-func (l *logzioClient) setListenerURL(region string) {
-	var url string
+func (l *logzioClient) setRegion(region string) error {
 	lowerCaseRegion := strings.ToLower(region)
-	switch lowerCaseRegion {
-	case "us":
-		url = "https://listener.logz.io:8071"
-	case "ca":
-		url = "https://listener-ca.logz.io:8071"
-	case "eu":
-		url = "https://listener-eu.logz.io:8071"
-	case "uk":
-		url = "https://listener-uk.logz.io:8071"
-	case "au":
-		url = "https://listener-au.logz.io:8071"
-	default:
-		url = "https://listener.logz.io:8071"
+	if _, ok := logzioListenerURLs[lowerCaseRegion]; !ok {
+		log.Printf("Warning: region %s not in safelist, defaulting to 'us'", region)
+		lowerCaseRegion = "us"
 	}
-	l.url = url
+	l.region = lowerCaseRegion
+	return nil
 }
 
 func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -245,7 +323,9 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		httpClient: client,
 		logsBuffer: bytes.Buffer{},
 	}
-	logzioClient.setListenerURL(logzioRegion)
+	if err := logzioClient.setRegion(logzioRegion); err != nil {
+		return ApiGatewayResponse(400, fmt.Sprintf("Invalid region: %s", err.Error())), nil
+	}
 	log.Println("Starting to parse request body")
 	var body map[string]interface{}
 	marshalErr := json.Unmarshal([]byte(request.Body), &body)

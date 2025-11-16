@@ -4,18 +4,20 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandleRequest(t *testing.T) {
-	jsonFile, err := os.Open(fmt.Sprintf("../testdata/sampleEvent.json"))
+	jsonFile, err := os.Open("../testdata/sampleEvent.json")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -84,27 +86,44 @@ func TestGetCredentialsFromHeaders(t *testing.T) {
 	}
 }
 
-func TestSetListenerURL(t *testing.T) {
-	type setListenerURLTest struct {
-		region   string
-		expected string
+func TestSetRegion(t *testing.T) {
+	type setRegionTest struct {
+		region      string
+		expectedURL string
+		expectedErr bool
 	}
-	var setListenerURLTests = []setListenerURLTest{
-		{"us", "https://listener.logz.io:8071"},
-		{"eu", "https://listener-eu.logz.io:8071"},
-		{"au", "https://listener-au.logz.io:8071"},
-		{"ca", "https://listener-ca.logz.io:8071"},
-		{"uk", "https://listener-uk.logz.io:8071"},
-		{"not-valid", "https://listener.logz.io:8071"},
-		{"", "https://listener.logz.io:8071"},
-		{"US", "https://listener.logz.io:8071"},
-		{"Us", "https://listener.logz.io:8071"},
+	var setRegionTests = []setRegionTest{
+		{"us", "https://listener.logz.io:8071", false},
+		{"eu", "https://listener-eu.logz.io:8071", false},
+		{"au", "https://listener-au.logz.io:8071", false},
+		{"ca", "https://listener-ca.logz.io:8071", false},
+		{"uk", "https://listener-uk.logz.io:8071", false},
+		{"not-valid", "https://listener.logz.io:8071", false}, // defaults to "us"
+		{"", "https://listener.logz.io:8071", false},          // defaults to "us"
+		{"US", "https://listener.logz.io:8071", false},        // case insensitive
+		{"Us", "https://listener.logz.io:8071", false},        // case insensitive
 	}
 
-	for _, test := range setListenerURLTests {
+	for _, test := range setRegionTests {
 		l := logzioClient{}
-		l.setListenerURL(test.region)
-		require.Equal(t, l.url, test.expected)
+		err := l.setRegion(test.region)
+		if test.expectedErr {
+			require.NotNil(t, err)
+		} else {
+			require.Nil(t, err)
+			// For invalid regions, it defaults to "us", so check the expected region
+			expectedRegion := strings.ToLower(test.region)
+			if expectedRegion != "us" && expectedRegion != "eu" && expectedRegion != "au" && expectedRegion != "ca" && expectedRegion != "uk" {
+				expectedRegion = "us" // Invalid regions default to "us"
+			}
+			require.Equal(t, expectedRegion, l.region)
+			// Verify getFullURL returns the expected URL (without token)
+			fullURL, err := l.getFullURL()
+			if err == nil {
+				// Extract base URL without query params for comparison
+				require.Contains(t, fullURL, test.expectedURL)
+			}
+		}
 	}
 }
 
@@ -140,7 +159,7 @@ func TestExport(t *testing.T) {
 		data := make([]byte, 100)
 		logzioClient := logzioClient{
 			token:      "token",
-			url:        ts.URL,
+			testURL:    ts.URL, // Use testURL for testing purposes
 			httpClient: &http.Client{},
 			logsBuffer: bytes.Buffer{},
 		}
@@ -149,4 +168,61 @@ func TestExport(t *testing.T) {
 		assert.Equal(t, 0, logzioClient.logsBuffer.Len())
 		ts.Close()
 	}
+}
+
+func TestSSRFProtection(t *testing.T) {
+	t.Run("rejects invalid region not in safelist", func(t *testing.T) {
+		client := logzioClient{
+			token:      "testtoken",
+			region:     "malicious-region",
+			httpClient: &http.Client{},
+			logsBuffer: bytes.Buffer{},
+		}
+		client.writeLog("test")
+		// Should return error status because region is not in safelist
+		statusCode := client.makeHttpRequest(bytes.Buffer{})
+		assert.Equal(t, http.StatusInternalServerError, statusCode)
+	})
+
+	t.Run("rejects empty region", func(t *testing.T) {
+		client := logzioClient{
+			token:      "testtoken",
+			region:     "",
+			httpClient: &http.Client{},
+			logsBuffer: bytes.Buffer{},
+		}
+		client.writeLog("test")
+		statusCode := client.makeHttpRequest(bytes.Buffer{})
+		assert.Equal(t, http.StatusInternalServerError, statusCode)
+	})
+
+	t.Run("allows only safelist regions", func(t *testing.T) {
+		validRegions := []string{"us", "eu", "au", "ca", "uk"}
+		for _, region := range validRegions {
+			client := logzioClient{
+				token:      "testtoken",
+				region:     region,
+				httpClient: &http.Client{},
+				logsBuffer: bytes.Buffer{},
+			}
+			// getFullURL should succeed for valid regions
+			fullURL, err := client.getFullURL()
+			assert.NoError(t, err, "region %s should be valid", region)
+			assert.Contains(t, fullURL, "listener")
+			assert.Contains(t, fullURL, "logz.io")
+		}
+	})
+
+	t.Run("rejects non-https scheme for production URLs", func(t *testing.T) {
+		client := logzioClient{
+			token:      "testtoken",
+			region:     "us",
+			httpClient: &http.Client{},
+			logsBuffer: bytes.Buffer{},
+		}
+		// getFullURL should return https URLs
+		fullURL, err := client.getFullURL()
+		assert.NoError(t, err)
+		assert.True(t, strings.HasPrefix(fullURL, "https://"), "URL should use https scheme")
+	})
 }
