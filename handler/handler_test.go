@@ -169,3 +169,60 @@ func TestExport(t *testing.T) {
 		ts.Close()
 	}
 }
+
+func TestSSRFProtection(t *testing.T) {
+	t.Run("rejects invalid region not in safelist", func(t *testing.T) {
+		client := logzioClient{
+			token:      "testtoken",
+			region:     "malicious-region",
+			httpClient: &http.Client{},
+			logsBuffer: bytes.Buffer{},
+		}
+		client.writeLog("test")
+		// Should return error status because region is not in safelist
+		statusCode := client.makeHttpRequest(bytes.Buffer{})
+		assert.Equal(t, http.StatusInternalServerError, statusCode)
+	})
+
+	t.Run("rejects empty region", func(t *testing.T) {
+		client := logzioClient{
+			token:      "testtoken",
+			region:     "",
+			httpClient: &http.Client{},
+			logsBuffer: bytes.Buffer{},
+		}
+		client.writeLog("test")
+		statusCode := client.makeHttpRequest(bytes.Buffer{})
+		assert.Equal(t, http.StatusInternalServerError, statusCode)
+	})
+
+	t.Run("allows only safelist regions", func(t *testing.T) {
+		validRegions := []string{"us", "eu", "au", "ca", "uk"}
+		for _, region := range validRegions {
+			client := logzioClient{
+				token:      "testtoken",
+				region:     region,
+				httpClient: &http.Client{},
+				logsBuffer: bytes.Buffer{},
+			}
+			// getFullURL should succeed for valid regions
+			fullURL, err := client.getFullURL()
+			assert.NoError(t, err, "region %s should be valid", region)
+			assert.Contains(t, fullURL, "listener")
+			assert.Contains(t, fullURL, "logz.io")
+		}
+	})
+
+	t.Run("rejects non-https scheme for production URLs", func(t *testing.T) {
+		client := logzioClient{
+			token:      "testtoken",
+			region:     "us",
+			httpClient: &http.Client{},
+			logsBuffer: bytes.Buffer{},
+		}
+		// getFullURL should return https URLs
+		fullURL, err := client.getFullURL()
+		assert.NoError(t, err)
+		assert.True(t, strings.HasPrefix(fullURL, "https://"), "URL should use https scheme")
+	})
+}

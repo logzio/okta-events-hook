@@ -173,6 +173,13 @@ func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
 	parsedURL.RawQuery = params.Encode()
 	fullURL := parsedURL.String()
 
+	if l.testURL == "" {
+		if _, ok := logzioListenerURLs[l.region]; !ok {
+			log.Printf("region %s is not in logzioListenerURLs\n", l.region)
+			return http.StatusInternalServerError
+		}
+	}
+
 	req, err := http.NewRequest("POST", fullURL, &data)
 	if err != nil {
 		log.Printf("Error creating request to %s %s\n", fullURL, err)
