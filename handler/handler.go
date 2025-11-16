@@ -117,12 +117,11 @@ var logzioListenerURLs = map[string]string{
 
 func (l *logzioClient) getFullURL() (string, error) {
 	var baseURL string
+	var ok bool
 
-	// Allow testURL to bypass safelist for testing purposes only
 	if l.testURL != "" {
 		baseURL = l.testURL
 	} else {
-		var ok bool
 		baseURL, ok = logzioListenerURLs[l.region]
 		if !ok {
 			return "", fmt.Errorf("region %s is not in logzioListenerURLs", l.region)
@@ -146,11 +145,33 @@ func (l *logzioClient) getFullURL() (string, error) {
 }
 
 func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
-	fullURL, err := l.getFullURL()
+	var baseURL string
+	if l.testURL != "" {
+		baseURL = l.testURL
+	} else {
+		var ok bool
+		baseURL, ok = logzioListenerURLs[l.region]
+		if !ok {
+			log.Printf("region %s is not in logzioListenerURLs\n", l.region)
+			return http.StatusInternalServerError
+		}
+	}
+
+	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
-		log.Printf("Error constructing URL: %s\n", err)
+		log.Printf("Error parsing URL: %s\n", err)
 		return http.StatusInternalServerError
 	}
+
+	if parsedURL.Scheme != "https" && l.testURL == "" {
+		log.Printf("invalid scheme %s\n", parsedURL.Scheme)
+		return http.StatusInternalServerError
+	}
+
+	params := url.Values{}
+	params.Set("token", l.token)
+	parsedURL.RawQuery = params.Encode()
+	fullURL := parsedURL.String()
 
 	req, err := http.NewRequest("POST", fullURL, &data)
 	if err != nil {
