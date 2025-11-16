@@ -99,52 +99,50 @@ func getCredentialsFromHeaders(headers map[string]string) (string, string, error
 
 type logzioClient struct {
 	token      string
-	url        string
+	region     string
 	httpClient *http.Client
 	logsBuffer bytes.Buffer
+	testURL    string
 }
 
 const maxBulkSize = 10000000
 
-var allowedHosts = []string{
-	"listener.logz.io:8071",
-	"listener-ca.logz.io:8071",
-	"listener-eu.logz.io:8071",
-	"listener-uk.logz.io:8071",
-	"listener-au.logz.io:8071",
-}
-
-func (l *logzioClient) isHostAllowed(host string) bool {
-	// Check against allowed production hosts
-	if slices.Contains(allowedHosts, host) {
-		return true
-	}
-	// Allow localhost for testing purposes only
-	// In production, setListenerURL always sets a logz.io URL, so localhost
-	// will only appear in test scenarios
-	if strings.HasPrefix(host, "127.0.0.1:") || strings.HasPrefix(host, "localhost:") {
-		return true
-	}
-	return false
+var logzioListenerURLs = map[string]string{
+	"us": "https://listener.logz.io:8071",
+	"ca": "https://listener-ca.logz.io:8071",
+	"eu": "https://listener-eu.logz.io:8071",
+	"uk": "https://listener-uk.logz.io:8071",
+	"au": "https://listener-au.logz.io:8071",
 }
 
 func (l *logzioClient) getFullURL() (string, error) {
-	baseURL, err := url.Parse(l.url)
+	var baseURL string
+
+	// Allow testURL to bypass safelist for testing purposes only
+	if l.testURL != "" {
+		baseURL = l.testURL
+	} else {
+		var ok bool
+		baseURL, ok = logzioListenerURLs[l.region]
+		if !ok {
+			return "", fmt.Errorf("region %s is not in logzioListenerURLs", l.region)
+		}
+	}
+
+	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
-		return "", fmt.Errorf("invalid base URL: %w", err)
+		return "", fmt.Errorf("invalid URL: %w", err)
 	}
 
-	// Validate host is in allowed list
-	if !l.isHostAllowed(baseURL.Host) {
-		return "", fmt.Errorf("host %s is not in allowed list", baseURL.Host)
+	if parsedURL.Scheme != "https" && l.testURL == "" {
+		return "", fmt.Errorf("invalid scheme %s, only https is allowed", parsedURL.Scheme)
 	}
 
-	// Properly encode the token parameter
 	params := url.Values{}
 	params.Set("token", l.token)
-	baseURL.RawQuery = params.Encode()
+	parsedURL.RawQuery = params.Encode()
 
-	return baseURL.String(), nil
+	return parsedURL.String(), nil
 }
 
 func (l *logzioClient) makeHttpRequest(data bytes.Buffer) int {
@@ -260,33 +258,23 @@ func (l *logzioClient) export() int {
 func (l *logzioClient) writeLog(record interface{}) error {
 	recordBytes, marshalErr := json.Marshal(record)
 	if marshalErr != nil {
-		return errors.New(fmt.Sprintf("Error getting log bytes: %s", marshalErr.Error()))
+		return fmt.Errorf("error getting log bytes: %w", marshalErr)
 	}
 	_, bufferErr := l.logsBuffer.Write(append(recordBytes, '\n'))
 	if bufferErr != nil {
-		return errors.New(fmt.Sprintf("Error writing log bytes to buffer: %s", bufferErr.Error()))
+		return fmt.Errorf("error writing log bytes to buffer: %w", bufferErr)
 	}
 	return nil
 }
 
-func (l *logzioClient) setListenerURL(region string) {
-	var url string
+func (l *logzioClient) setRegion(region string) error {
 	lowerCaseRegion := strings.ToLower(region)
-	switch lowerCaseRegion {
-	case "us":
-		url = "https://listener.logz.io:8071"
-	case "ca":
-		url = "https://listener-ca.logz.io:8071"
-	case "eu":
-		url = "https://listener-eu.logz.io:8071"
-	case "uk":
-		url = "https://listener-uk.logz.io:8071"
-	case "au":
-		url = "https://listener-au.logz.io:8071"
-	default:
-		url = "https://listener.logz.io:8071"
+	if _, ok := logzioListenerURLs[lowerCaseRegion]; !ok {
+		log.Printf("Warning: region %s not in safelist, defaulting to 'us'", region)
+		lowerCaseRegion = "us"
 	}
-	l.url = url
+	l.region = lowerCaseRegion
+	return nil
 }
 
 func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -307,7 +295,9 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 		httpClient: client,
 		logsBuffer: bytes.Buffer{},
 	}
-	logzioClient.setListenerURL(logzioRegion)
+	if err := logzioClient.setRegion(logzioRegion); err != nil {
+		return ApiGatewayResponse(400, fmt.Sprintf("Invalid region: %s", err.Error())), nil
+	}
 	log.Println("Starting to parse request body")
 	var body map[string]interface{}
 	marshalErr := json.Unmarshal([]byte(request.Body), &body)
